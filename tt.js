@@ -59,8 +59,13 @@
                 lastExtractionData.count,
                 lastExtractionData.testNewCount,
                 lastExtractionData.newUrls,
-                lastExtractionData.savedSnapshot
+                lastExtractionData.savedSnapshot,
+                false
             );
+        } else if (selectedLinks.size > 0) {
+            displayCount(getUsernameFromUrl() || 'user', 0, 0, [], null, false);
+        } else {
+            removeDisplay();
         }
     }
 
@@ -287,8 +292,10 @@
             return d.toLocaleString();
         } catch { return ''; }
     }
-    function displayCount(username, count, testNewCount = 0, newUrls = [], savedSnapshot = null) {
-        lastExtractionData = { username, count, testNewCount, newUrls, savedSnapshot };
+    function displayCount(username, count, testNewCount = 0, newUrls = [], savedSnapshot = null, updateData = true) {
+        if (updateData) {
+            lastExtractionData = { username, count, testNewCount, newUrls, savedSnapshot };
+        }
         let box = document.getElementById('exactVideoCountDisplay');
         if (!box) {
             box = document.createElement('div');
@@ -322,14 +329,18 @@
 
         const prev = getSavedVideoCount(username);
         const newVideos = prev !== null ? count - prev : 0;
-        let html = `<a href="#" style="color:#0ff;" id="copyAllPosts">Total Videos: ${count}</a>`;
-
-        if (savedSnapshot && savedSnapshot.ids) {
-            const debugText = `Saved IDs: ${savedSnapshot.ids.length} | Snapshot: ${formatTimestamp(savedSnapshot.ts)}`;
-            html += ` <span id="tmk_debug_info" style="cursor:help; color:#aaa; font-size:16px; margin-left:5px;" title="${debugText}">?</span>`;
+        let html = '';
+        const displayCountVal = count > 0 ? count : (lastExtractionData ? lastExtractionData.count : 0);
+        if (displayCountVal > 0) {
+            html += `<a href="#" style="color:#0ff;" id="copyAllPosts">Total Videos: ${displayCountVal}</a>`;
+            const snap = savedSnapshot || (lastExtractionData ? lastExtractionData.savedSnapshot : null);
+            if (snap && snap.ids) {
+                const debugText = `Saved IDs: ${snap.ids.length} | Snapshot: ${formatTimestamp(snap.ts)}`;
+                html += ` <span id="tmk_debug_info" style="cursor:help; color:#aaa; font-size:16px; margin-left:5px;" title="${debugText}">?</span>`;
+            }
         }
 
-        if (SHOW_NEW_STATS) {
+        if (SHOW_NEW_STATS && (displayCountVal > 0)) {
             if (newVideos !== 0) html += `<br><a href="#" style="color:#0f0;" id="copyNewPosts">New Videos: ${newVideos > 0 ? '+' : ''}${newVideos}</a>`;
             if (testNewCount === 'n/a') {
                 html += `<br><span style="color:#aaa;">Test New Videos: n/a</span>`;
@@ -482,15 +493,15 @@
     // ------------------ Checkbox Injection ------------------
     function injectCheckboxes() {
         if (!isProfilePage()) {
-            document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
+            document.querySelectorAll('.tmk-checkbox-wrapper').forEach(el => el.remove());
             return;
         }
         document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]').forEach(a => {
             if (a.querySelector('.tmk-custom-checkbox')) return;
-            a.dataset.checkboxesAdded = "true";
             const href = a.href.split('?')[0];
             // Individual checkbox (top-left)
             const leftWrapper = document.createElement('div');
+            leftWrapper.className = 'tmk-checkbox-wrapper';
             leftWrapper.style.position = 'absolute';
             leftWrapper.style.top = '5px';
             leftWrapper.style.left = '5px';
@@ -510,6 +521,7 @@
             a.appendChild(leftWrapper);
             // Row-select checkbox (top-right) - position-based
             const rightWrapper = document.createElement('div');
+            rightWrapper.className = 'tmk-checkbox-wrapper';
             rightWrapper.style.position = 'absolute';
             rightWrapper.style.top = '5px';
             rightWrapper.style.right = '5px';
@@ -603,12 +615,12 @@
 
     // ------------------ Stories Mode ------------------
     function handleStoriesMode() {
-        const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        const closeBtnSelector = '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > button.css-18jchqz-7937d88b--ButtonBasicButtonContainer-7937d88b--StyledCloseIconContainer.e1hfi39w4';
-        const targetBtn = document.querySelector(closeBtnSelector);
+        const isVideo = /^\/@.*\/video\/\d+/.test(location.pathname);
+        const targetSelector = '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > div.css-1awl6z0-7937d88b--DivIconWrapper.e1hfi39w7';
+        const target = document.querySelector(targetSelector);
         let container = document.getElementById('tmk_video_actions_container');
 
-        if (isVideo && targetBtn) {
+        if (isVideo && target) {
             if (!container) {
                 container = document.createElement('div');
                 container.id = 'tmk_video_actions_container';
@@ -616,13 +628,11 @@
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '5px',
-                    marginTop: '40px',
-                    marginLeft: '10px',
+                    marginRight: '20px',
                     zIndex: '10001',
-                    position: 'absolute',
-                    background: 'rgba(0,0,0,0.3)',
-                    padding: '5px',
-                    borderRadius: '4px',
+                    background: 'rgba(0,0,0,0.5)',
+                    padding: '8px',
+                    borderRadius: '8px',
                     pointerEvents: 'auto'
                 });
 
@@ -661,7 +671,10 @@
                     showNotification("Cleared list and copied current URL.", "#4ecdc4");
                 }));
 
-                targetBtn.parentNode.appendChild(container);
+                target.parentNode.style.display = 'flex';
+                target.parentNode.style.alignItems = 'center';
+                target.parentNode.style.flexDirection = 'row';
+                target.parentNode.insertBefore(container, target);
             }
         } else {
             if (container) {
@@ -684,18 +697,24 @@
             if (currentUsername !== lastUsername) {
                 lastUsername = currentUsername;
                 selectedLinks.clear();
+                lastExtractionData = null;
             }
 
             if (isProfilePage()) {
                 setTimeout(extractVideoCount, 500);
+            } else {
+                removeDisplay();
             }
         }
 
         if (isProfilePage()) {
             injectCheckboxes();
             if (!document.getElementById('exactVideoCountDisplay') && window._tmk_extractRetry === 0) {
-                extractVideoCount();
+                if (lastExtractionData) refreshUI();
+                else extractVideoCount();
             }
+        } else {
+            injectCheckboxes(); // This will handle cleanup if not on profile page
         }
         handleStoriesMode();
     }, 1000);
