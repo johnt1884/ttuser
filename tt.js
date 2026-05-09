@@ -294,7 +294,7 @@
             box = document.createElement('div');
             box.id = 'exactVideoCountDisplay';
             Object.assign(box.style, {
-                position: 'fixed',
+                position: 'absolute',
                 top: '80px',
                 right: '20px',
                 padding: '10px 20px',
@@ -311,7 +311,17 @@
         }
         const prev = getSavedVideoCount(username);
         const newVideos = prev !== null ? count - prev : 0;
-        let html = `<a href="#" style="color:#0ff;" id="copyAllPosts">Total Videos: ${count}</a>`;
+
+        let metaInfo = '';
+        if (savedSnapshot && savedSnapshot.ids) {
+            metaInfo = `Saved IDs: ${savedSnapshot.ids.length} Snapshot: ${formatTimestamp(savedSnapshot.ts)}`;
+        }
+
+        let html = `<div style="display:flex; align-items:center; gap:5px;">
+                      <a href="#" style="color:#0ff;" id="copyAllPosts">Total Videos: ${count}</a>
+                      <span id="tmk-info-icon" title="${metaInfo}" style="cursor:help; background:#555; border-radius:50%; width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:bold;">?</span>
+                    </div>`;
+
         if (SHOW_NEW_STATS) {
             if (newVideos !== 0) html += `<br><a href="#" style="color:#0f0;" id="copyNewPosts">New Videos: ${newVideos > 0 ? '+' : ''}${newVideos}</a>`;
             if (testNewCount === 'n/a') {
@@ -340,11 +350,6 @@
                         Clear Memory
                      </a>`;
             html += `<br><span style="color:#fff; font-size:12px;">Selected: ${selectedLinks.size}</span>`;
-        }
-        // Debug info: show saved snapshot timestamp and saved count if provided
-        if (savedSnapshot && savedSnapshot.ids) {
-            html += `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:6px 0;">`;
-            html += `<div style="font-size:11px;color:#bbb;">Saved IDs: ${savedSnapshot.ids.length} <br>Snapshot: ${formatTimestamp(savedSnapshot.ts)}</div>`;
         }
         box.innerHTML = html;
         // ------------------ Button Handlers ------------------
@@ -471,8 +476,6 @@
     function injectCheckboxes() {
         if (!isProfilePage()) {
             document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
-            selectedLinks.clear();
-            extractVideoCount();
             return;
         }
         document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]').forEach(a => {
@@ -591,118 +594,66 @@
     }, true);
 
 
-    // ------------------ Stories Mode ------------------
-    function handleStoriesMode() {
+    // ------------------ Video Page Links ------------------
+    function handleVideoPageLinks() {
         const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        const storiesExitButton = document.querySelector('button[aria-label="exit"].css-1ezvabx, button[aria-label="exit"][data-tux-color-scheme="dark"]');
-        const existingBtn = document.getElementById('tmk_stories_clipboard_btn');
+        const targetSelector = '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > div.css-1awl6z0-7937d88b--DivIconWrapper.e1hfi39w7';
+        const target = document.querySelector(targetSelector);
+        let container = document.getElementById('tmk-video-links-container');
 
-        if (storiesExitButton || isVideo) {
-            if (!existingBtn) {
-                const btn = document.createElement('button');
-                btn.id = 'tmk_stories_clipboard_btn';
-                Object.assign(btn.style, {
-                    position: 'fixed',
-                    bottom: '20px',
-                    right: '20px',
-                    zIndex: 999999,
-                    width: '45px',
-                    height: '45px',
-                    borderRadius: '50%',
-                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    color: '#fff',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    cursor: 'pointer',
+        if (isVideo && target) {
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'tmk-video-links-container';
+                Object.assign(container.style, {
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                    transition: 'all 0.2s ease'
+                    marginRight: '12px',
+                    gap: '15px',
+                    fontSize: '14px',
+                    zIndex: '1000'
                 });
 
-                btn.onmouseover = () => {
-                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.25)';
-                    btn.style.transform = 'scale(1.05)';
-                };
-                btn.onmouseout = () => {
-                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-                    btn.style.transform = 'scale(1)';
-                };
-
-                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`;
-
-                btn.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    // Toggle visibility of a small menu instead of direct add
-                    let menu = document.getElementById('tmk_stories_menu');
-                    if (menu) {
-                        menu.remove();
-                        return;
-                    }
-
-                    menu = document.createElement('div');
-                    menu.id = 'tmk_stories_menu';
-                    Object.assign(menu.style, {
-                        position: 'fixed',
-                        bottom: '75px',
-                        right: '20px',
-                        zIndex: 999999,
-                        background: 'rgba(0,0,0,0.85)',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                        fontSize: '13px'
+                const createLink = (text, color, onClick) => {
+                    const a = document.createElement('a');
+                    a.href = '#';
+                    a.textContent = text;
+                    Object.assign(a.style, {
+                        color: color,
+                        textDecoration: 'none',
+                        fontWeight: 'bold',
+                        whiteSpace: 'nowrap'
                     });
-
-                    const createItem = (text, color, onClick) => {
-                        const item = document.createElement('a');
-                        item.href = '#';
-                        item.textContent = text;
-                        item.style.color = color;
-                        item.style.textDecoration = 'none';
-                        item.onclick = (e) => {
-                            e.preventDefault();
-                            onClick();
-                            menu.remove();
-                        };
-                        return item;
+                    a.onclick = (e) => {
+                        e.preventDefault();
+                        onClick();
                     };
-
-                    const currentUrl = window.location.href.split('?')[0];
-
-                    menu.appendChild(createItem('Add Current URL to List', '#4ecdc4', () => {
-                        const updatedClipboard = appendToClipboard([currentUrl]);
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
-                        }
-                        showNotification(`Added to list: ${currentUrl.split('/').pop()}`, '#4ecdc4');
-                    }));
-
-                    menu.appendChild(createItem('Clear List & Copy Current URL', '#ff6b6b', () => {
-                        clearClipboard();
-                        const updatedClipboard = appendToClipboard([currentUrl]);
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
-                        }
-                        showNotification("Cleared list and copied current URL.", "#4ecdc4");
-                    }));
-
-                    document.body.appendChild(menu);
+                    return a;
                 };
 
-                document.body.appendChild(btn);
+                container.appendChild(createLink('Add Current URL to List', '#4ecdc4', () => {
+                    const currentUrl = window.location.href.split('?')[0];
+                    const updatedClipboard = appendToClipboard([currentUrl]);
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
+                    }
+                    showNotification(`Added to list: ${currentUrl.split('/').pop()}`, '#4ecdc4');
+                }));
+
+                container.appendChild(createLink('Clear List & Copy Current URL', '#ff6b6b', () => {
+                    clearClipboard();
+                    const currentUrl = window.location.href.split('?')[0];
+                    const updatedClipboard = appendToClipboard([currentUrl]);
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
+                    }
+                    showNotification("Cleared list and copied current URL.", "#ff6b6b");
+                }));
+
+                target.parentNode.insertBefore(container, target);
             }
         } else {
-            if (existingBtn) {
-                existingBtn.remove();
-            }
+            if (container) container.remove();
         }
     }
 
@@ -712,10 +663,17 @@
         if (location.href !== lastUrl) {
             lastUrl = location.href;
             window._tmk_extractRetry = 0;
-            setTimeout(extractVideoCount, 1000);
+            if (isProfilePage()) {
+                setTimeout(extractVideoCount, 500);
+            } else {
+                removeDisplay();
+            }
+        }
+        if (isProfilePage() && !document.getElementById('exactVideoCountDisplay')) {
+             refreshUI();
         }
         injectCheckboxes();
-        handleStoriesMode();
-    }, 2000);
+        handleVideoPageLinks();
+    }, 1000);
     window.addEventListener('load', () => setTimeout(extractVideoCount, 3000));
 })();
