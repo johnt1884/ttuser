@@ -309,9 +309,26 @@
             });
             document.body.appendChild(box);
         }
+
+        if (selectedLinks.size > 0) {
+            if (box.style.position !== 'absolute') {
+                box.style.position = 'absolute';
+                box.style.top = (window.scrollY + 80) + 'px';
+            }
+        } else {
+            box.style.position = 'fixed';
+            box.style.top = '80px';
+        }
+
         const prev = getSavedVideoCount(username);
         const newVideos = prev !== null ? count - prev : 0;
         let html = `<a href="#" style="color:#0ff;" id="copyAllPosts">Total Videos: ${count}</a>`;
+
+        if (savedSnapshot && savedSnapshot.ids) {
+            const debugText = `Saved IDs: ${savedSnapshot.ids.length} | Snapshot: ${formatTimestamp(savedSnapshot.ts)}`;
+            html += ` <span id="tmk_debug_info" style="cursor:help; color:#aaa; font-size:16px; margin-left:5px;" title="${debugText}">?</span>`;
+        }
+
         if (SHOW_NEW_STATS) {
             if (newVideos !== 0) html += `<br><a href="#" style="color:#0f0;" id="copyNewPosts">New Videos: ${newVideos > 0 ? '+' : ''}${newVideos}</a>`;
             if (testNewCount === 'n/a') {
@@ -340,11 +357,6 @@
                         Clear Memory
                      </a>`;
             html += `<br><span style="color:#fff; font-size:12px;">Selected: ${selectedLinks.size}</span>`;
-        }
-        // Debug info: show saved snapshot timestamp and saved count if provided
-        if (savedSnapshot && savedSnapshot.ids) {
-            html += `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:6px 0;">`;
-            html += `<div style="font-size:11px;color:#bbb;">Saved IDs: ${savedSnapshot.ids.length} <br>Snapshot: ${formatTimestamp(savedSnapshot.ts)}</div>`;
         }
         box.innerHTML = html;
         // ------------------ Button Handlers ------------------
@@ -471,12 +483,10 @@
     function injectCheckboxes() {
         if (!isProfilePage()) {
             document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
-            selectedLinks.clear();
-            extractVideoCount();
             return;
         }
         document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]').forEach(a => {
-            if (a.dataset.checkboxesAdded) return;
+            if (a.querySelector('.tmk-custom-checkbox')) return;
             a.dataset.checkboxesAdded = "true";
             const href = a.href.split('?')[0];
             // Individual checkbox (top-left)
@@ -594,128 +604,100 @@
     // ------------------ Stories Mode ------------------
     function handleStoriesMode() {
         const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        const storiesExitButton = document.querySelector('button[aria-label="exit"].css-1ezvabx, button[aria-label="exit"][data-tux-color-scheme="dark"]');
-        const existingBtn = document.getElementById('tmk_stories_clipboard_btn');
+        const closeBtnSelector = '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > button.css-18jchqz-7937d88b--ButtonBasicButtonContainer-7937d88b--StyledCloseIconContainer.e1hfi39w4';
+        const targetBtn = document.querySelector(closeBtnSelector);
+        let container = document.getElementById('tmk_video_actions_container');
 
-        if (storiesExitButton || isVideo) {
-            if (!existingBtn) {
-                const btn = document.createElement('button');
-                btn.id = 'tmk_stories_clipboard_btn';
-                Object.assign(btn.style, {
-                    position: 'fixed',
-                    bottom: '20px',
-                    right: '20px',
-                    zIndex: 999999,
-                    width: '45px',
-                    height: '45px',
-                    borderRadius: '50%',
-                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    color: '#fff',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    cursor: 'pointer',
+        if (isVideo && targetBtn) {
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'tmk_video_actions_container';
+                Object.assign(container.style, {
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                    transition: 'all 0.2s ease'
+                    flexDirection: 'column',
+                    gap: '5px',
+                    marginTop: '40px',
+                    marginLeft: '10px',
+                    zIndex: '10001',
+                    position: 'absolute',
+                    background: 'rgba(0,0,0,0.3)',
+                    padding: '5px',
+                    borderRadius: '4px',
+                    pointerEvents: 'auto'
                 });
 
-                btn.onmouseover = () => {
-                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.25)';
-                    btn.style.transform = 'scale(1.05)';
-                };
-                btn.onmouseout = () => {
-                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-                    btn.style.transform = 'scale(1)';
-                };
-
-                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`;
-
-                btn.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    // Toggle visibility of a small menu instead of direct add
-                    let menu = document.getElementById('tmk_stories_menu');
-                    if (menu) {
-                        menu.remove();
-                        return;
-                    }
-
-                    menu = document.createElement('div');
-                    menu.id = 'tmk_stories_menu';
-                    Object.assign(menu.style, {
-                        position: 'fixed',
-                        bottom: '75px',
-                        right: '20px',
-                        zIndex: 999999,
-                        background: 'rgba(0,0,0,0.85)',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                        fontSize: '13px'
-                    });
-
-                    const createItem = (text, color, onClick) => {
-                        const item = document.createElement('a');
-                        item.href = '#';
-                        item.textContent = text;
-                        item.style.color = color;
-                        item.style.textDecoration = 'none';
-                        item.onclick = (e) => {
-                            e.preventDefault();
-                            onClick();
-                            menu.remove();
-                        };
-                        return item;
+                const createItem = (text, color, onClick) => {
+                    const item = document.createElement('a');
+                    item.href = '#';
+                    item.textContent = text;
+                    item.style.color = color;
+                    item.style.textDecoration = 'none';
+                    item.style.fontSize = '13px';
+                    item.style.fontWeight = 'bold';
+                    item.style.whiteSpace = 'nowrap';
+                    item.onclick = (e) => {
+                        e.preventDefault();
+                        onClick();
                     };
-
-                    const currentUrl = window.location.href.split('?')[0];
-
-                    menu.appendChild(createItem('Add Current URL to List', '#4ecdc4', () => {
-                        const updatedClipboard = appendToClipboard([currentUrl]);
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
-                        }
-                        showNotification(`Added to list: ${currentUrl.split('/').pop()}`, '#4ecdc4');
-                    }));
-
-                    menu.appendChild(createItem('Clear List & Copy Current URL', '#ff6b6b', () => {
-                        clearClipboard();
-                        const updatedClipboard = appendToClipboard([currentUrl]);
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
-                        }
-                        showNotification("Cleared list and copied current URL.", "#4ecdc4");
-                    }));
-
-                    document.body.appendChild(menu);
+                    return item;
                 };
 
-                document.body.appendChild(btn);
+                container.appendChild(createItem('Add Current URL to List', '#4ecdc4', () => {
+                    const currentUrl = window.location.href.split('?')[0];
+                    const updatedClipboard = appendToClipboard([currentUrl]);
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
+                    }
+                    showNotification(`Added to list: ${currentUrl.split('/').pop()}`, '#4ecdc4');
+                }));
+
+                container.appendChild(createItem('Clear List & Copy Current URL', '#ff6b6b', () => {
+                    const currentUrl = window.location.href.split('?')[0];
+                    clearClipboard();
+                    const updatedClipboard = appendToClipboard([currentUrl]);
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
+                    }
+                    showNotification("Cleared list and copied current URL.", "#4ecdc4");
+                }));
+
+                targetBtn.parentNode.appendChild(container);
             }
         } else {
-            if (existingBtn) {
-                existingBtn.remove();
+            if (container) {
+                container.remove();
             }
         }
     }
 
     // ------------------ SPA Detection ------------------
     let lastUrl = location.href;
+    let lastUsername = getUsernameFromUrl();
     setInterval(() => {
-        if (location.href !== lastUrl) {
-            lastUrl = location.href;
+        const currentUrl = location.href;
+        const currentUsername = getUsernameFromUrl();
+
+        if (currentUrl !== lastUrl) {
+            lastUrl = currentUrl;
             window._tmk_extractRetry = 0;
-            setTimeout(extractVideoCount, 1000);
+
+            if (currentUsername !== lastUsername) {
+                lastUsername = currentUsername;
+                selectedLinks.clear();
+            }
+
+            if (isProfilePage()) {
+                setTimeout(extractVideoCount, 500);
+            }
         }
-        injectCheckboxes();
+
+        if (isProfilePage()) {
+            injectCheckboxes();
+            if (!document.getElementById('exactVideoCountDisplay') && window._tmk_extractRetry === 0) {
+                extractVideoCount();
+            }
+        }
         handleStoriesMode();
-    }, 2000);
-    window.addEventListener('load', () => setTimeout(extractVideoCount, 3000));
+    }, 1000);
+    window.addEventListener('load', () => setTimeout(extractVideoCount, 2000));
 })();
