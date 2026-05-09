@@ -597,8 +597,19 @@
     // ------------------ Video Page Links ------------------
     function handleVideoPageLinks() {
         const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        const targetSelector = '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > div.css-1awl6z0-7937d88b--DivIconWrapper.e1hfi39w7';
-        const target = document.querySelector(targetSelector);
+        // Robust selector looking for the icon wrapper in the video container
+        const targetSelectors = [
+            '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > div.css-1awl6z0-7937d88b--DivIconWrapper.e1hfi39w7',
+            '[class*="DivVideoContainer"] [class*="DivIconWrapper"]',
+            '[class*="DivVideoContainer"] button[aria-label="Copy link"]',
+            '[class*="DivVideoContainer"] [class*="DivIconWrapper"]'
+        ];
+        let target = null;
+        for (const sel of targetSelectors) {
+            target = document.querySelector(sel);
+            if (target) break;
+        }
+
         let container = document.getElementById('tmk-video-links-container');
 
         if (isVideo && target) {
