@@ -354,8 +354,10 @@
         if (document.getElementById('tmk-story-options')) return;
 
         const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
+        if (isVideo) return;
+
         const exitBtn = document.querySelector('button[aria-label="exit"]');
-        if (!exitBtn && !isVideo) return;
+        if (!exitBtn) return;
 
         const options = document.createElement('div');
         options.id = 'tmk-story-options';
