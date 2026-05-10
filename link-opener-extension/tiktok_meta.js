@@ -18,7 +18,16 @@
         }
     }
 
+    function isContextValid() {
+        try {
+            return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function processPage() {
+        if (!isContextValid()) return;
         const handle = getProfileHandle();
         if (!handle) return;
 

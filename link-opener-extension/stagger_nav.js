@@ -4,6 +4,14 @@
 (async () => {
     'use strict';
 
+    function isContextValid() {
+        try {
+            return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function showNotification(msg, color = '#fff', duration = 3000) {
         let container = document.getElementById('tmk-notification-container');
         if (!container) {
@@ -46,6 +54,7 @@
     }
 
     function createForwardBtn() {
+        if (!isContextValid()) return;
         const btn = document.createElement("button");
         btn.id = "stagger-forward-btn";
         btn.textContent = ">>";
@@ -89,9 +98,16 @@
         }
 
         // Poll for selection state since we can't easily listen to changes in another script's injected checkboxes
-        setInterval(updateState, 500);
+        const statePoll = setInterval(() => {
+            if (!isContextValid()) {
+                clearInterval(statePoll);
+                return;
+            }
+            updateState();
+        }, 500);
 
         btn.onclick = () => {
+            if (!isContextValid()) return;
             const selected = document.querySelectorAll(".tmk-custom-checkbox:checked");
             if (selected.length > 0) {
                 const urls = Array.from(selected).map(cb => {
@@ -121,7 +137,9 @@
                     }
                 }
             }
-            chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+            if (isContextValid()) {
+                chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+            }
         };
 
         document.body.appendChild(btn);
@@ -156,22 +174,28 @@
             pauseBtn.textContent = enabled ? "II" : "▶";
         };
 
-        chrome.storage.local.get("automatic_load_enabled", (res) => {
-            updatePauseBtn(res.automatic_load_enabled);
-        });
+        if (isContextValid()) {
+            chrome.storage.local.get("automatic_load_enabled", (res) => {
+                updatePauseBtn(res.automatic_load_enabled);
+            });
+        }
 
         pauseBtn.onclick = () => {
-            chrome.storage.local.get("automatic_load_enabled", (res) => {
-                const newState = !res.automatic_load_enabled;
-                chrome.storage.local.set({ "automatic_load_enabled": newState });
-            });
+            if (isContextValid()) {
+                chrome.storage.local.get("automatic_load_enabled", (res) => {
+                    const newState = !res.automatic_load_enabled;
+                    chrome.storage.local.set({ "automatic_load_enabled": newState });
+                });
+            }
         };
 
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes.automatic_load_enabled) {
-                updatePauseBtn(changes.automatic_load_enabled.newValue);
-            }
-        });
+        if (isContextValid()) {
+            chrome.storage.onChanged.addListener((changes) => {
+                if (changes.automatic_load_enabled) {
+                    updatePauseBtn(changes.automatic_load_enabled.newValue);
+                }
+            });
+        }
 
         document.body.appendChild(pauseBtn);
 
@@ -212,27 +236,34 @@
             }
         };
 
-        chrome.storage.local.get("fast_mode_enabled", (res) => {
-            updateFastBtn(res.fast_mode_enabled);
-        });
+        if (isContextValid()) {
+            chrome.storage.local.get("fast_mode_enabled", (res) => {
+                updateFastBtn(res.fast_mode_enabled);
+            });
+        }
 
         fastBtn.onclick = () => {
-            chrome.storage.local.get("fast_mode_enabled", (res) => {
-                const newState = !res.fast_mode_enabled;
-                chrome.storage.local.set({ "fast_mode_enabled": newState });
-            });
+            if (isContextValid()) {
+                chrome.storage.local.get("fast_mode_enabled", (res) => {
+                    const newState = !res.fast_mode_enabled;
+                    chrome.storage.local.set({ "fast_mode_enabled": newState });
+                });
+            }
         };
 
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes.fast_mode_enabled) {
-                updateFastBtn(changes.fast_mode_enabled.newValue);
-            }
-        });
+        if (isContextValid()) {
+            chrome.storage.onChanged.addListener((changes) => {
+                if (changes.fast_mode_enabled) {
+                    updateFastBtn(changes.fast_mode_enabled.newValue);
+                }
+            });
+        }
 
         document.body.appendChild(fastBtn);
 
         // Second yellow >> button (only if new videos present)
         const hasNewVideos = async () => {
+            if (!isContextValid()) return false;
             // 1. Check userscript element
             const newCountElement = document.getElementById('tt-thumb-meta__new-count');
             if (newCountElement && parseInt(newCountElement.textContent) > 0) return true;
@@ -297,6 +328,7 @@
 
                 if (urls.length > 0) {
                     try {
+                        if (!isContextValid()) return;
                         const CLIPBOARD_KEY = 'tmk_internal_clipboard';
                         const raw = localStorage.getItem(CLIPBOARD_KEY);
                         const currentItems = raw ? JSON.parse(raw) : [];
@@ -312,7 +344,9 @@
                         }));
                     } catch (e) {}
                 }
-                chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                if (isContextValid()) {
+                    chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                }
             };
 
             document.body.appendChild(btnNew);
@@ -498,11 +532,23 @@
     injectVideoClipboardIcon();
 
     // Failsafe polling for SPA transitions
-    setInterval(() => {
+    const videoPoll = setInterval(() => {
+        if (!isContextValid()) {
+            clearInterval(videoPoll);
+            return;
+        }
         injectVideoClipboardIcon();
     }, 1000);
 
-    const response = await chrome.runtime.sendMessage({ type: "CHECK_STAGGERED" });
+    let response;
+    if (isContextValid()) {
+        try {
+            response = await chrome.runtime.sendMessage({ type: "CHECK_STAGGERED" });
+        } catch (e) {
+            console.warn("Stagger Nav: Failed to send initial CHECK_STAGGERED message", e);
+        }
+    }
+
     if (response && response.isStaggered) {
         createForwardBtn();
         if (response.total) {
@@ -526,6 +572,7 @@
 
         async function startPolling() {
             if (pollInterval) clearInterval(pollInterval);
+            if (!isContextValid()) return;
 
             const res = await chrome.storage.local.get(["automatic_load_enabled", "fast_mode_enabled", "staggered_scan_baselines"]);
             if (!res.automatic_load_enabled) return;
@@ -541,6 +588,10 @@
             const maxPolls = 10;
 
             pollInterval = setInterval(() => {
+                if (!isContextValid()) {
+                    clearInterval(pollInterval);
+                    return;
+                }
                 pollCount++;
                 
                 // 1. Check for the userscript element as a primary signal
@@ -571,7 +622,9 @@
                 if (foundNew) {
                     console.log("Staggered Navigation: New videos found via direct scraping! Stopping automation.");
                     clearInterval(pollInterval);
-                    chrome.runtime.sendMessage({ type: "PLAY_SOUND", sound: "new_videos" });
+                    if (isContextValid()) {
+                        chrome.runtime.sendMessage({ type: "PLAY_SOUND", sound: "new_videos" });
+                    }
                     return;
                 }
 
@@ -582,14 +635,18 @@
                     clearInterval(pollInterval);
                     const delay = res.fast_mode_enabled ? 200 : Math.floor(Math.random() * 2000) + 1000;
                     setTimeout(() => {
-                        chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                        if (isContextValid()) {
+                            chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                        }
                     }, delay);
                 } else if (pollCount >= maxPolls) {
                     console.log("Staggered Navigation: No new content found after timeout. Advancing.");
                     clearInterval(pollInterval);
                     const delay = res.fast_mode_enabled ? 200 : Math.floor(Math.random() * 2000) + 1000;
                     setTimeout(() => {
-                        chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                        if (isContextValid()) {
+                            chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                        }
                     }, delay);
                 }
             }, 1000);
@@ -597,15 +654,17 @@
 
         startPolling();
 
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes.automatic_load_enabled || changes.fast_mode_enabled) {
-                if ((changes.automatic_load_enabled && changes.automatic_load_enabled.newValue) ||
-                    (changes.fast_mode_enabled)) {
-                    startPolling();
-                } else {
-                    if (pollInterval) clearInterval(pollInterval);
+        if (isContextValid()) {
+            chrome.storage.onChanged.addListener((changes) => {
+                if (changes.automatic_load_enabled || changes.fast_mode_enabled) {
+                    if ((changes.automatic_load_enabled && changes.automatic_load_enabled.newValue) ||
+                        (changes.fast_mode_enabled)) {
+                        startPolling();
+                    } else {
+                        if (pollInterval) clearInterval(pollInterval);
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 })();
