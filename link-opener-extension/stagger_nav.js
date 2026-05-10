@@ -352,6 +352,13 @@
     // -----------------------------
     function injectVideoOptions() {
         const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
+        let container = document.getElementById('tmk-video-links-container');
+
+        if (!isVideo) {
+            if (container) container.remove();
+            return;
+        }
+
         const targetSelectors = [
             '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > div.css-1awl6z0-7937d88b--DivIconWrapper.e1hfi39w7',
             '[class*="DivVideoContainer"] [class*="DivIconWrapper"]',
@@ -363,8 +370,6 @@
             target = document.querySelector(sel);
             if (target) break;
         }
-
-        let container = document.getElementById('tmk-video-links-container');
 
         if (isVideo && target) {
             if (!container || container.parentNode !== target.parentNode) {
