@@ -479,11 +479,12 @@
     // ------------------ Checkbox Injection ------------------
     function injectCheckboxes() {
         if (!isProfilePage()) {
-            document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
+            const existing = document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox');
+            if (existing.length > 0) existing.forEach(el => el.remove());
             return;
         }
-        document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]').forEach(a => {
-            if (a.dataset.checkboxesAdded && a.querySelector('.tmk-custom-checkbox')) return;
+        // Only target anchors that haven't been processed yet to save time
+        document.querySelectorAll('a[href*="/video/"]:not([data-checkboxes-added]), a[href*="/photo/"]:not([data-checkboxes-added])').forEach(a => {
             a.dataset.checkboxesAdded = "true";
             const href = a.href.split('?')[0];
             // Individual checkbox (top-left)
@@ -601,34 +602,43 @@
     // ------------------ SPA Detection & Reactive UI ------------------
     let lastUrl = location.href;
     let lastUser = getUsernameFromUrl();
+    let isInjecting = false;
 
     function runAllInjections() {
-        if (isProfilePage()) {
-            const currentUser = getUsernameFromUrl();
-            if (currentUser !== lastUser) {
-                lastUser = currentUser;
-                selectedLinks.clear();
-                window._tmk_extractRetry = 0;
-                extractVideoCount();
+        if (isInjecting) return;
+        isInjecting = true;
+        try {
+            if (isProfilePage()) {
+                const currentUser = getUsernameFromUrl();
+                if (currentUser !== lastUser) {
+                    lastUser = currentUser;
+                    selectedLinks.clear();
+                    window._tmk_extractRetry = 0;
+                    extractVideoCount();
+                }
+                if (!document.getElementById('exactVideoCountDisplay')) {
+                    refreshUI();
+                }
+                injectCheckboxes();
+            } else {
+                removeDisplay();
+                document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
+                lastUser = null;
             }
-            if (!document.getElementById('exactVideoCountDisplay')) {
-                refreshUI();
-            }
-            injectCheckboxes();
-        } else {
-            removeDisplay();
-            document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
-            lastUser = null;
+        } finally {
+            isInjecting = false;
         }
     }
 
-    // Use MutationObserver for immediate response to DOM changes
+    // Use MutationObserver with a small debounce to reduce overhead
+    let injectionTimer = null;
     const observer = new MutationObserver(() => {
-        runAllInjections();
+        if (injectionTimer) clearTimeout(injectionTimer);
+        injectionTimer = setTimeout(runAllInjections, 150);
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Fallback interval
+    // Fallback interval for URL changes
     setInterval(() => {
         if (location.href !== lastUrl) {
             lastUrl = location.href;

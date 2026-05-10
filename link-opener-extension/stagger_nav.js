@@ -557,8 +557,21 @@
         }
     });
 
+    let isInjectingExtension = false;
+    async function runAllExtensionInjectionsThrottled() {
+        if (isInjectingExtension) return;
+        isInjectingExtension = true;
+        try {
+            await runAllExtensionInjections();
+        } finally {
+            isInjectingExtension = false;
+        }
+    }
+
+    let extensionTimer = null;
     const extensionObserver = new MutationObserver(() => {
-        runAllExtensionInjections();
+        if (extensionTimer) clearTimeout(extensionTimer);
+        extensionTimer = setTimeout(runAllExtensionInjectionsThrottled, 150);
     });
     extensionObserver.observe(document.body, { childList: true, subtree: true });
 
@@ -566,9 +579,9 @@
     setInterval(() => {
         if (location.href !== lastUrl) {
             lastUrl = location.href;
-            runAllExtensionInjections();
+            runAllExtensionInjectionsThrottled();
         }
     }, 500);
 
-    runAllExtensionInjections();
+    runAllExtensionInjectionsThrottled();
 })();
