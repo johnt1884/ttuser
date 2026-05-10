@@ -351,11 +351,14 @@
     // VIDEO PAGE CONTROLS
     // -----------------------------
     function injectVideoOptions() {
-        const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        let container = document.getElementById('tmk-video-links-container');
+        const isVideo = /\/(video|photo)\/\d+/.test(location.pathname) && (
+            document.querySelector('[class*="DivVideoContainer"]') ||
+            document.querySelector('video') ||
+            document.querySelector('[data-e2e="browse-video-desc"]')
+        );
 
         if (!isVideo) {
-            if (container) container.remove();
+            document.querySelectorAll('#tmk-video-links-container').forEach(el => el.remove());
             return;
         }
 
@@ -584,10 +587,19 @@
         }
     }, 500);
 
-    // Robust 2-second check as requested to ensure links are correctly shown/hidden
+    // Robust 1-second check to ensure links are correctly shown/hidden (DOM-based cleanup)
     setInterval(() => {
-        injectVideoOptions();
-    }, 2000);
+        const isVideoPage = /\/(video|photo)\/\d+/.test(location.pathname) && (
+            document.querySelector('[class*="DivVideoContainer"]') ||
+            document.querySelector('video')
+        );
+
+        if (!isVideoPage) {
+            document.querySelectorAll('#tmk-video-links-container').forEach(el => el.remove());
+        } else {
+            injectVideoOptions();
+        }
+    }, 1000);
 
     runAllExtensionInjectionsThrottled();
 })();
