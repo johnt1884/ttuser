@@ -576,12 +576,18 @@
     extensionObserver.observe(document.body, { childList: true, subtree: true });
 
     let lastUrl = location.href;
+    // Fast check for SPA transitions
     setInterval(() => {
         if (location.href !== lastUrl) {
             lastUrl = location.href;
             runAllExtensionInjectionsThrottled();
         }
     }, 500);
+
+    // Robust 2-second check as requested to ensure links are correctly shown/hidden
+    setInterval(() => {
+        injectVideoOptions();
+    }, 2000);
 
     runAllExtensionInjectionsThrottled();
 })();

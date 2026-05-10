@@ -499,8 +499,12 @@
             cb.style.transform = 'scale(2)';
             ['click','mousedown','mouseup'].forEach(evt => cb.addEventListener(evt, e => e.stopPropagation()));
             cb.addEventListener('change', () => {
-                if (cb.checked) selectedLinks.add(href);
-                else selectedLinks.delete(href);
+                if (cb.checked) {
+                    selectedLinks.add(href);
+                } else {
+                    selectedLinks.delete(href);
+                }
+                // Update selection UI directly instead of full refresh if possible
                 refreshUI();
             });
             leftWrapper.appendChild(cb);
@@ -619,6 +623,7 @@
                 if (!document.getElementById('exactVideoCountDisplay')) {
                     refreshUI();
                 }
+                // Only scan for NEW checkboxes
                 injectCheckboxes();
             } else {
                 removeDisplay();
