@@ -348,177 +348,258 @@
     }
 
     // -----------------------------
-    // STORY CONTROLS
+    // VIDEO PAGE CONTROLS
     // -----------------------------
-    function injectStoryOptions() {
-        if (document.getElementById('tmk-story-options')) return;
+    function injectVideoOptions() {
+        const isVideo = /\/(video|photo)\/\d+/.test(location.pathname) && (
+            document.querySelector('[class*="DivVideoContainer"]') ||
+            document.querySelector('video') ||
+            document.querySelector('[data-e2e="browse-video-desc"]')
+        );
 
-        const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        const exitBtn = document.querySelector('button[aria-label="exit"]');
-        if (!exitBtn && !isVideo) return;
-
-        const options = document.createElement('div');
-        options.id = 'tmk-story-options';
-        Object.assign(options.style, {
-            position: 'fixed',
-            top: '4.5rem',
-            right: '1rem',
-            zIndex: 999999,
-            color: '#fff',
-            fontSize: '14px',
-            textAlign: 'right',
-            background: 'rgba(0,0,0,0.5)',
-            padding: '5px 10px',
-            borderRadius: '4px'
-        });
-
-        const appendBtn = document.createElement('div');
-        appendBtn.textContent = 'Add Current URL to List';
-        appendBtn.style.cursor = 'pointer';
-        appendBtn.style.marginBottom = '5px';
-        appendBtn.style.textDecoration = 'underline';
-        appendBtn.onclick = () => {
-            const url = location.href.split('?')[0];
-            const CLIPBOARD_KEY = 'tmk_internal_clipboard';
-            const raw = localStorage.getItem(CLIPBOARD_KEY);
-            const currentItems = raw ? JSON.parse(raw) : [];
-            if (!currentItems.includes(url)) {
-                const merged = [...currentItems, url];
-                localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(merged));
-                navigator.clipboard.writeText(merged.join('\n')).catch(() => {});
-                showNotification(`Added current story to list.\nTotal: ${merged.length}`, '#4ecdc4');
-            } else {
-                showNotification("URL already in list.", "#ff6b6b");
-            }
-        };
-
-        const clearCopyBtn = document.createElement('div');
-        clearCopyBtn.textContent = 'Clear List & Copy Current URL';
-        clearCopyBtn.style.cursor = 'pointer';
-        clearCopyBtn.style.textDecoration = 'underline';
-        clearCopyBtn.onclick = () => {
-            const url = location.href.split('?')[0];
-            const CLIPBOARD_KEY = 'tmk_internal_clipboard';
-            localStorage.setItem(CLIPBOARD_KEY, JSON.stringify([url]));
-            navigator.clipboard.writeText(url).catch(() => {});
-            showNotification("Cleared list and copied current story.", "#4ecdc4");
-        };
-
-        options.appendChild(appendBtn);
-        options.appendChild(clearCopyBtn);
-        document.body.appendChild(options);
-    }
-
-    const storyObserver = new MutationObserver(() => {
-        injectStoryOptions();
-    });
-    storyObserver.observe(document.body, { childList: true, subtree: true });
-    injectStoryOptions();
-
-    const response = await chrome.runtime.sendMessage({ type: "CHECK_STAGGERED" });
-    if (response && response.isStaggered) {
-        createForwardBtn();
-        if (response.total) {
-            createCounter(response.currentIndex, response.total);
+        if (!isVideo) {
+            document.querySelectorAll('#tmk-video-links-container').forEach(el => el.remove());
+            return;
         }
 
-        // Check for pending notification
-        try {
-            const notify = localStorage.getItem('stagger_append_notify');
-            if (notify) {
-                const data = JSON.parse(notify);
-                localStorage.removeItem('stagger_append_notify');
-                showNotification(`Appended ${data.appended} link(s).\nTotal in memory: ${data.total}`, '#4ecdc4');
+        const targetSelectors = [
+            '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > div.css-1awl6z0-7937d88b--DivIconWrapper.e1hfi39w7',
+            '[class*="DivVideoContainer"] [class*="DivIconWrapper"]',
+            '[class*="DivVideoContainer"] button[aria-label="Copy link"]'
+        ];
+
+        let target = null;
+        for (const sel of targetSelectors) {
+            target = document.querySelector(sel);
+            if (target) break;
+        }
+
+        if (isVideo && target) {
+            if (!container || container.parentNode !== target.parentNode) {
+                if (container) container.remove();
+
+                container = document.createElement('div');
+                container.id = 'tmk-video-links-container';
+                Object.assign(container.style, {
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginRight: '12px',
+                    gap: '15px',
+                    fontSize: '14px',
+                    zIndex: '1000'
+                });
+
+                const createLink = (text, color, onClick) => {
+                    const a = document.createElement('a');
+                    a.href = '#';
+                    a.textContent = text;
+                    Object.assign(a.style, {
+                        color: color,
+                        textDecoration: 'none',
+                        fontWeight: 'bold',
+                        whiteSpace: 'nowrap'
+                    });
+                    a.onclick = (e) => {
+                        e.preventDefault();
+                        onClick();
+                    };
+                    return a;
+                };
+
+                container.appendChild(createLink('Add Current URL to List', '#4ecdc4', () => {
+                    const url = location.href.split('?')[0];
+                    const CLIPBOARD_KEY = 'tmk_internal_clipboard';
+                    const raw = localStorage.getItem(CLIPBOARD_KEY);
+                    const currentItems = raw ? JSON.parse(raw) : [];
+                    if (!currentItems.includes(url)) {
+                        const merged = [...currentItems, url];
+                        localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(merged));
+                        navigator.clipboard.writeText(merged.join('\n')).catch(() => {});
+                        showNotification(`Added current video to list.\nTotal: ${merged.length}`, '#4ecdc4');
+                    } else {
+                        showNotification("URL already in list.", "#ff6b6b");
+                    }
+                }));
+
+                container.appendChild(createLink('Clear List & Copy Current URL', '#ff6b6b', () => {
+                    const url = location.href.split('?')[0];
+                    const CLIPBOARD_KEY = 'tmk_internal_clipboard';
+                    localStorage.setItem(CLIPBOARD_KEY, JSON.stringify([url]));
+                    navigator.clipboard.writeText(url).catch(() => {});
+                    showNotification("Cleared list and copied current URL.", "#4ecdc4");
+                }));
+
+                target.parentNode.insertBefore(container, target);
             }
-        } catch (e) {}
+        } else {
+            if (container) container.remove();
+        }
+    }
 
-        // -----------------------------
-        // AUTOMATION LOGIC
-        // -----------------------------
-        let pollInterval = null;
+    async function runAllExtensionInjections() {
+        injectVideoOptions();
 
-        async function startPolling() {
-            if (pollInterval) clearInterval(pollInterval);
+        const response = await chrome.runtime.sendMessage({ type: "CHECK_STAGGERED" });
+        if (response && response.isStaggered) {
+            if (!document.getElementById('stagger-forward-btn')) {
+                createForwardBtn();
+            }
+            if (response.total && !document.getElementById('stagger-counter')) {
+                createCounter(response.currentIndex, response.total);
+            }
 
-            const res = await chrome.storage.local.get(["automatic_load_enabled", "fast_mode_enabled", "staggered_scan_baselines"]);
-            if (!res.automatic_load_enabled) return;
+            // Check for pending notification
+            try {
+                const notify = localStorage.getItem('stagger_append_notify');
+                if (notify) {
+                    const data = JSON.parse(notify);
+                    localStorage.removeItem('stagger_append_notify');
+                    showNotification(`Appended ${data.appended} link(s).\nTotal in memory: ${data.total}`, '#4ecdc4');
+                }
+            } catch (e) {}
 
-            console.log("Staggered Navigation: Automatic Load is enabled.");
-            
-            const baselines = res.staggered_scan_baselines || {};
+            // Ensure automation logic is initialized only once per session if possible,
+            // but for SPA we might need to re-check.
+            if (!window._tmk_pollingStarted) {
+                window._tmk_pollingStarted = true;
+                startPolling();
+            }
+        }
+    }
+
+    // -----------------------------
+    // AUTOMATION LOGIC
+    // -----------------------------
+    let pollInterval = null;
+
+    async function startPolling() {
+        if (pollInterval) clearInterval(pollInterval);
+
+        const res = await chrome.storage.local.get(["automatic_load_enabled", "fast_mode_enabled", "staggered_scan_baselines"]);
+        if (!res.automatic_load_enabled) return;
+
+        console.log("Staggered Navigation: Automatic Load is enabled.");
+
+        const getBaseline = async () => {
+            const res2 = await chrome.storage.local.get("staggered_scan_baselines");
+            const baselines = res2.staggered_scan_baselines || {};
             const handleMatch = location.pathname.match(/^\/(@[^/]+)/);
             const handle = handleMatch ? handleMatch[1] : null;
-            const baseline = handle ? (baselines[`tiktok_last_post:${handle}`] || 0) : Infinity;
+            return handle ? (baselines[`tiktok_last_post:${handle}`] || 0) : Infinity;
+        };
 
-            let pollCount = 0;
-            const maxPolls = 10;
+        let pollCount = 0;
+        const maxPolls = 10;
 
-            pollInterval = setInterval(() => {
-                pollCount++;
-                
-                // 1. Check for the userscript element as a primary signal
-                const newCountElement = document.getElementById('tt-thumb-meta__new-count');
-                if (newCountElement && parseInt(newCountElement.textContent) > 0) {
-                    console.log("Staggered Navigation: New videos found via userscript signal! Stopping automation.");
-                    clearInterval(pollInterval);
-                    chrome.runtime.sendMessage({ type: "PLAY_SOUND", sound: "new_videos" });
-                    return;
-                }
+        pollInterval = setInterval(async () => {
+            pollCount++;
 
-                // 2. Direct scraping fallback to ensure robustness
-                const links = document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]');
-                let foundNew = false;
-                for (const a of links) {
-                    const postIdMatch = a.href.match(/\/(?:video|photo)\/(\d{10,})/);
-                    if (postIdMatch) {
-                        try {
-                            const ts = Number(BigInt(postIdMatch[1]) >> 32n) * 1000;
-                            if (ts > baseline) {
-                                foundNew = true;
-                                break;
-                            }
-                        } catch(e) {}
-                    }
-                }
+            // 1. Check for the userscript element as a primary signal
+            const newCountElement = document.getElementById('tt-thumb-meta__new-count');
+            if (newCountElement && parseInt(newCountElement.textContent) > 0) {
+                console.log("Staggered Navigation: New videos found via userscript signal! Stopping automation.");
+                clearInterval(pollInterval);
+                chrome.runtime.sendMessage({ type: "PLAY_SOUND", sound: "new_videos" });
+                return;
+            }
 
-                if (foundNew) {
-                    console.log("Staggered Navigation: New videos found via direct scraping! Stopping automation.");
-                    clearInterval(pollInterval);
-                    chrome.runtime.sendMessage({ type: "PLAY_SOUND", sound: "new_videos" });
-                    return;
-                }
-
-                // Continue polling if no videos yet or we haven't given the userscript long enough
-                const pollThreshold = res.fast_mode_enabled ? 1 : 3;
-                if (pollCount >= pollThreshold && document.querySelectorAll('[data-e2e="user-post-item"]').length > 0) {
-                    console.log(`Staggered Navigation: No new content found after ${pollThreshold}s of active content. Advancing.`);
-                    clearInterval(pollInterval);
-                    const delay = res.fast_mode_enabled ? 200 : Math.floor(Math.random() * 2000) + 1000;
-                    setTimeout(() => {
-                        chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
-                    }, delay);
-                } else if (pollCount >= maxPolls) {
-                    console.log("Staggered Navigation: No new content found after timeout. Advancing.");
-                    clearInterval(pollInterval);
-                    const delay = res.fast_mode_enabled ? 200 : Math.floor(Math.random() * 2000) + 1000;
-                    setTimeout(() => {
-                        chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
-                    }, delay);
-                }
-            }, 1000);
-        }
-
-        startPolling();
-
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes.automatic_load_enabled || changes.fast_mode_enabled) {
-                if ((changes.automatic_load_enabled && changes.automatic_load_enabled.newValue) ||
-                    (changes.fast_mode_enabled)) {
-                    startPolling();
-                } else {
-                    if (pollInterval) clearInterval(pollInterval);
+            // 2. Direct scraping fallback to ensure robustness
+            const baseline = await getBaseline();
+            const links = document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]');
+            let foundNew = false;
+            for (const a of links) {
+                const postIdMatch = a.href.match(/\/(?:video|photo)\/(\d{10,})/);
+                if (postIdMatch) {
+                    try {
+                        const ts = Number(BigInt(postIdMatch[1]) >> 32n) * 1000;
+                        if (ts > baseline) {
+                            foundNew = true;
+                            break;
+                        }
+                    } catch(e) {}
                 }
             }
-        });
+
+            if (foundNew) {
+                console.log("Staggered Navigation: New videos found via direct scraping! Stopping automation.");
+                clearInterval(pollInterval);
+                chrome.runtime.sendMessage({ type: "PLAY_SOUND", sound: "new_videos" });
+                return;
+            }
+
+            // Continue polling if no videos yet or we haven't given the userscript long enough
+            const storage = await chrome.storage.local.get("fast_mode_enabled");
+            const isFastMode = storage.fast_mode_enabled;
+            const pollThreshold = isFastMode ? 1 : 3;
+            if (pollCount >= pollThreshold && document.querySelectorAll('[data-e2e="user-post-item"]').length > 0) {
+                console.log(`Staggered Navigation: No new content found after ${pollThreshold}s of active content. Advancing.`);
+                clearInterval(pollInterval);
+                const delay = isFastMode ? 200 : Math.floor(Math.random() * 2000) + 1000;
+                setTimeout(() => {
+                    chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                }, delay);
+            } else if (pollCount >= maxPolls) {
+                console.log("Staggered Navigation: No new content found after timeout. Advancing.");
+                clearInterval(pollInterval);
+                const delay = isFastMode ? 200 : Math.floor(Math.random() * 2000) + 1000;
+                setTimeout(() => {
+                    chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                }, delay);
+            }
+        }, 1000);
     }
+
+    chrome.storage.onChanged.addListener((changes) => {
+        if (changes.automatic_load_enabled || changes.fast_mode_enabled) {
+            if ((changes.automatic_load_enabled && changes.automatic_load_enabled.newValue) ||
+                (changes.fast_mode_enabled)) {
+                startPolling();
+            } else {
+                if (pollInterval) clearInterval(pollInterval);
+            }
+        }
+    });
+
+    let isInjectingExtension = false;
+    async function runAllExtensionInjectionsThrottled() {
+        if (isInjectingExtension) return;
+        isInjectingExtension = true;
+        try {
+            await runAllExtensionInjections();
+        } finally {
+            isInjectingExtension = false;
+        }
+    }
+
+    let extensionTimer = null;
+    const extensionObserver = new MutationObserver(() => {
+        if (extensionTimer) clearTimeout(extensionTimer);
+        extensionTimer = setTimeout(runAllExtensionInjectionsThrottled, 150);
+    });
+    extensionObserver.observe(document.body, { childList: true, subtree: true });
+
+    let lastUrl = location.href;
+    // Fast check for SPA transitions
+    setInterval(() => {
+        if (location.href !== lastUrl) {
+            lastUrl = location.href;
+            runAllExtensionInjectionsThrottled();
+        }
+    }, 500);
+
+    // Robust 1-second check to ensure links are correctly shown/hidden (DOM-based cleanup)
+    setInterval(() => {
+        const isVideoPage = /\/(video|photo)\/\d+/.test(location.pathname) && (
+            document.querySelector('[class*="DivVideoContainer"]') ||
+            document.querySelector('video')
+        );
+
+        if (!isVideoPage) {
+            document.querySelectorAll('#tmk-video-links-container').forEach(el => el.remove());
+        } else {
+            injectVideoOptions();
+        }
+    }, 1000);
+
+    runAllExtensionInjectionsThrottled();
 })();

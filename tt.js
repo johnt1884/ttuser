@@ -205,6 +205,10 @@
             removeDisplay();
             return;
         }
+        const currentUser = getUsernameFromUrl();
+        if (lastExtractionData && lastExtractionData.username !== currentUser) {
+            removeDisplay(); // Clear display of previous user while loading
+        }
         const scriptElement = document.getElementById('SIGI_STATE') ||
             document.querySelector('script[id^="__UNIVERSAL_DATA_FOR_REHYDRATION__"]');
         if (!scriptElement) {
@@ -294,7 +298,7 @@
             box = document.createElement('div');
             box.id = 'exactVideoCountDisplay';
             Object.assign(box.style, {
-                position: 'fixed',
+                position: 'absolute',
                 top: '80px',
                 right: '20px',
                 padding: '10px 20px',
@@ -311,7 +315,17 @@
         }
         const prev = getSavedVideoCount(username);
         const newVideos = prev !== null ? count - prev : 0;
-        let html = `<a href="#" style="color:#0ff;" id="copyAllPosts">Total Videos: ${count}</a>`;
+
+        let metaInfo = '';
+        if (savedSnapshot && savedSnapshot.ids) {
+            metaInfo = `Saved IDs: ${savedSnapshot.ids.length} Snapshot: ${formatTimestamp(savedSnapshot.ts)}`;
+        }
+
+        let html = `<div style="display:flex; align-items:center; gap:5px;">
+                      <a href="#" style="color:#0ff;" id="copyAllPosts">Total Videos: ${count}</a>
+                      <span id="tmk-info-icon" title="${metaInfo}" style="cursor:help; background:#555; border-radius:50%; width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:bold;">?</span>
+                    </div>`;
+
         if (SHOW_NEW_STATS) {
             if (newVideos !== 0) html += `<br><a href="#" style="color:#0f0;" id="copyNewPosts">New Videos: ${newVideos > 0 ? '+' : ''}${newVideos}</a>`;
             if (testNewCount === 'n/a') {
@@ -340,11 +354,6 @@
                         Clear Memory
                      </a>`;
             html += `<br><span style="color:#fff; font-size:12px;">Selected: ${selectedLinks.size}</span>`;
-        }
-        // Debug info: show saved snapshot timestamp and saved count if provided
-        if (savedSnapshot && savedSnapshot.ids) {
-            html += `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:6px 0;">`;
-            html += `<div style="font-size:11px;color:#bbb;">Saved IDs: ${savedSnapshot.ids.length} <br>Snapshot: ${formatTimestamp(savedSnapshot.ts)}</div>`;
         }
         box.innerHTML = html;
         // ------------------ Button Handlers ------------------
@@ -470,13 +479,12 @@
     // ------------------ Checkbox Injection ------------------
     function injectCheckboxes() {
         if (!isProfilePage()) {
-            document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
-            selectedLinks.clear();
-            extractVideoCount();
+            const existing = document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox');
+            if (existing.length > 0) existing.forEach(el => el.remove());
             return;
         }
-        document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]').forEach(a => {
-            if (a.dataset.checkboxesAdded) return;
+        // Only target anchors that haven't been processed yet to save time
+        document.querySelectorAll('a[href*="/video/"]:not([data-checkboxes-added]), a[href*="/photo/"]:not([data-checkboxes-added])').forEach(a => {
             a.dataset.checkboxesAdded = "true";
             const href = a.href.split('?')[0];
             // Individual checkbox (top-left)
@@ -491,8 +499,12 @@
             cb.style.transform = 'scale(2)';
             ['click','mousedown','mouseup'].forEach(evt => cb.addEventListener(evt, e => e.stopPropagation()));
             cb.addEventListener('change', () => {
-                if (cb.checked) selectedLinks.add(href);
-                else selectedLinks.delete(href);
+                if (cb.checked) {
+                    selectedLinks.add(href);
+                } else {
+                    selectedLinks.delete(href);
+                }
+                // Update selection UI directly instead of full refresh if possible
                 refreshUI();
             });
             leftWrapper.appendChild(cb);
@@ -591,131 +603,56 @@
     }, true);
 
 
-    // ------------------ Stories Mode ------------------
-    function handleStoriesMode() {
-        const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        const storiesExitButton = document.querySelector('button[aria-label="exit"].css-1ezvabx, button[aria-label="exit"][data-tux-color-scheme="dark"]');
-        const existingBtn = document.getElementById('tmk_stories_clipboard_btn');
+    // ------------------ SPA Detection & Reactive UI ------------------
+    let lastUrl = location.href;
+    let lastUser = getUsernameFromUrl();
+    let isInjecting = false;
 
-        if (storiesExitButton || isVideo) {
-            if (!existingBtn) {
-                const btn = document.createElement('button');
-                btn.id = 'tmk_stories_clipboard_btn';
-                Object.assign(btn.style, {
-                    position: 'fixed',
-                    bottom: '20px',
-                    right: '20px',
-                    zIndex: 999999,
-                    width: '45px',
-                    height: '45px',
-                    borderRadius: '50%',
-                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    color: '#fff',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                    transition: 'all 0.2s ease'
-                });
-
-                btn.onmouseover = () => {
-                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.25)';
-                    btn.style.transform = 'scale(1.05)';
-                };
-                btn.onmouseout = () => {
-                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-                    btn.style.transform = 'scale(1)';
-                };
-
-                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`;
-
-                btn.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    // Toggle visibility of a small menu instead of direct add
-                    let menu = document.getElementById('tmk_stories_menu');
-                    if (menu) {
-                        menu.remove();
-                        return;
-                    }
-
-                    menu = document.createElement('div');
-                    menu.id = 'tmk_stories_menu';
-                    Object.assign(menu.style, {
-                        position: 'fixed',
-                        bottom: '75px',
-                        right: '20px',
-                        zIndex: 999999,
-                        background: 'rgba(0,0,0,0.85)',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                        fontSize: '13px'
-                    });
-
-                    const createItem = (text, color, onClick) => {
-                        const item = document.createElement('a');
-                        item.href = '#';
-                        item.textContent = text;
-                        item.style.color = color;
-                        item.style.textDecoration = 'none';
-                        item.onclick = (e) => {
-                            e.preventDefault();
-                            onClick();
-                            menu.remove();
-                        };
-                        return item;
-                    };
-
-                    const currentUrl = window.location.href.split('?')[0];
-
-                    menu.appendChild(createItem('Add Current URL to List', '#4ecdc4', () => {
-                        const updatedClipboard = appendToClipboard([currentUrl]);
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
-                        }
-                        showNotification(`Added to list: ${currentUrl.split('/').pop()}`, '#4ecdc4');
-                    }));
-
-                    menu.appendChild(createItem('Clear List & Copy Current URL', '#ff6b6b', () => {
-                        clearClipboard();
-                        const updatedClipboard = appendToClipboard([currentUrl]);
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
-                        }
-                        showNotification("Cleared list and copied current URL.", "#4ecdc4");
-                    }));
-
-                    document.body.appendChild(menu);
-                };
-
-                document.body.appendChild(btn);
+    function runAllInjections() {
+        if (isInjecting) return;
+        isInjecting = true;
+        try {
+            if (isProfilePage()) {
+                const currentUser = getUsernameFromUrl();
+                if (currentUser !== lastUser) {
+                    lastUser = currentUser;
+                    selectedLinks.clear();
+                    window._tmk_extractRetry = 0;
+                    extractVideoCount();
+                }
+                if (!document.getElementById('exactVideoCountDisplay')) {
+                    refreshUI();
+                }
+                // Only scan for NEW checkboxes
+                injectCheckboxes();
+            } else {
+                removeDisplay();
+                document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
+                lastUser = null;
             }
-        } else {
-            if (existingBtn) {
-                existingBtn.remove();
-            }
+        } finally {
+            isInjecting = false;
         }
     }
 
-    // ------------------ SPA Detection ------------------
-    let lastUrl = location.href;
+    // Use MutationObserver with a small debounce to reduce overhead
+    let injectionTimer = null;
+    const observer = new MutationObserver(() => {
+        if (injectionTimer) clearTimeout(injectionTimer);
+        injectionTimer = setTimeout(runAllInjections, 150);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Fallback interval for URL changes
     setInterval(() => {
         if (location.href !== lastUrl) {
             lastUrl = location.href;
-            window._tmk_extractRetry = 0;
-            setTimeout(extractVideoCount, 1000);
+            runAllInjections();
         }
-        injectCheckboxes();
-        handleStoriesMode();
-    }, 2000);
-    window.addEventListener('load', () => setTimeout(extractVideoCount, 3000));
+    }, 500);
+
+    window.addEventListener('load', () => {
+        runAllInjections();
+        setTimeout(extractVideoCount, 2000);
+    });
 })();
