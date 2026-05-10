@@ -1159,14 +1159,16 @@ function playNotificationSound(type) {
     }
 }
 
-chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === "PLAY_SOUND") {
-        playNotificationSound(message.sound);
-    } else if (message.type === "STAGGERED_FINISHED") {
-        playNotificationSound('finished');
-        alert("Staggered load finished.");
-    }
-});
+if (isContextValid()) {
+    chrome.runtime.onMessage.addListener((message) => {
+        if (message.type === "PLAY_SOUND") {
+            playNotificationSound(message.sound);
+        } else if (message.type === "STAGGERED_FINISHED") {
+            playNotificationSound('finished');
+            alert("Staggered load finished.");
+        }
+    });
+}
 
 // -----------------------------
 // INIT

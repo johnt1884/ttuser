@@ -18,11 +18,25 @@
         }
     }
 
-    function processPage() {
-        const handle = getProfileHandle();
-        if (!handle) return;
+    function isContextValid() {
+        try {
+            return typeof chrome !== "undefined" &&
+                   !!chrome.runtime &&
+                   !!chrome.runtime.id &&
+                   !!chrome.storage &&
+                   !!chrome.storage.local;
+        } catch (e) {
+            return false;
+        }
+    }
 
-        const cards = document.querySelectorAll('[data-e2e="user-post-item-list"] [data-e2e="user-post-item"]');
+    function processPage() {
+        if (!isContextValid()) return;
+        try {
+            const handle = getProfileHandle();
+            if (!handle) return;
+
+            const cards = document.querySelectorAll('[data-e2e="user-post-item-list"] [data-e2e="user-post-item"]');
         let maxTimestamp = 0;
 
         cards.forEach(card => {
@@ -37,13 +51,22 @@
             }
         });
 
-        if (maxTimestamp > 0) {
-            const key = `tiktok_last_post:${handle}`;
-            chrome.storage.local.set({ [key]: maxTimestamp });
+            if (maxTimestamp > 0) {
+                const key = `tiktok_last_post:${handle}`;
+                if (isContextValid()) {
+                    chrome.storage.local.set({ [key]: maxTimestamp });
+                }
+            }
+        } catch (e) {
+            console.warn("Tiktok Meta: processPage failed", e);
         }
     }
 
     const observer = new MutationObserver(() => {
+        if (!isContextValid()) {
+            observer.disconnect();
+            return;
+        }
         processPage();
     });
 

@@ -4,6 +4,18 @@
 (async () => {
     'use strict';
 
+    function isContextValid() {
+        try {
+            return typeof chrome !== "undefined" &&
+                   !!chrome.runtime &&
+                   !!chrome.runtime.id &&
+                   !!chrome.storage &&
+                   !!chrome.storage.local;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function showNotification(msg, color = '#fff', duration = 3000) {
         let container = document.getElementById('tmk-notification-container');
         if (!container) {
@@ -46,6 +58,7 @@
     }
 
     function createForwardBtn() {
+        if (!isContextValid()) return;
         const btn = document.createElement("button");
         btn.id = "stagger-forward-btn";
         btn.textContent = ">>";
@@ -89,9 +102,16 @@
         }
 
         // Poll for selection state since we can't easily listen to changes in another script's injected checkboxes
-        setInterval(updateState, 500);
+        const statePoll = setInterval(() => {
+            if (!isContextValid()) {
+                clearInterval(statePoll);
+                return;
+            }
+            updateState();
+        }, 500);
 
         btn.onclick = () => {
+            if (!isContextValid()) return;
             const selected = document.querySelectorAll(".tmk-custom-checkbox:checked");
             if (selected.length > 0) {
                 const urls = Array.from(selected).map(cb => {
@@ -121,7 +141,9 @@
                     }
                 }
             }
-            chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+            if (isContextValid()) {
+                chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+            }
         };
 
         document.body.appendChild(btn);
@@ -156,22 +178,28 @@
             pauseBtn.textContent = enabled ? "II" : "▶";
         };
 
-        chrome.storage.local.get("automatic_load_enabled", (res) => {
-            updatePauseBtn(res.automatic_load_enabled);
-        });
+        if (isContextValid()) {
+            chrome.storage.local.get("automatic_load_enabled", (res) => {
+                updatePauseBtn(res.automatic_load_enabled);
+            });
+        }
 
         pauseBtn.onclick = () => {
-            chrome.storage.local.get("automatic_load_enabled", (res) => {
-                const newState = !res.automatic_load_enabled;
-                chrome.storage.local.set({ "automatic_load_enabled": newState });
-            });
+            if (isContextValid()) {
+                chrome.storage.local.get("automatic_load_enabled", (res) => {
+                    const newState = !res.automatic_load_enabled;
+                    chrome.storage.local.set({ "automatic_load_enabled": newState });
+                });
+            }
         };
 
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes.automatic_load_enabled) {
-                updatePauseBtn(changes.automatic_load_enabled.newValue);
-            }
-        });
+        if (isContextValid()) {
+            chrome.storage.onChanged.addListener((changes) => {
+                if (changes.automatic_load_enabled) {
+                    updatePauseBtn(changes.automatic_load_enabled.newValue);
+                }
+            });
+        }
 
         document.body.appendChild(pauseBtn);
 
@@ -212,27 +240,34 @@
             }
         };
 
-        chrome.storage.local.get("fast_mode_enabled", (res) => {
-            updateFastBtn(res.fast_mode_enabled);
-        });
+        if (isContextValid()) {
+            chrome.storage.local.get("fast_mode_enabled", (res) => {
+                updateFastBtn(res.fast_mode_enabled);
+            });
+        }
 
         fastBtn.onclick = () => {
-            chrome.storage.local.get("fast_mode_enabled", (res) => {
-                const newState = !res.fast_mode_enabled;
-                chrome.storage.local.set({ "fast_mode_enabled": newState });
-            });
+            if (isContextValid()) {
+                chrome.storage.local.get("fast_mode_enabled", (res) => {
+                    const newState = !res.fast_mode_enabled;
+                    chrome.storage.local.set({ "fast_mode_enabled": newState });
+                });
+            }
         };
 
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes.fast_mode_enabled) {
-                updateFastBtn(changes.fast_mode_enabled.newValue);
-            }
-        });
+        if (isContextValid()) {
+            chrome.storage.onChanged.addListener((changes) => {
+                if (changes.fast_mode_enabled) {
+                    updateFastBtn(changes.fast_mode_enabled.newValue);
+                }
+            });
+        }
 
         document.body.appendChild(fastBtn);
 
         // Second yellow >> button (only if new videos present)
         const hasNewVideos = async () => {
+            if (!isContextValid()) return false;
             // 1. Check userscript element
             const newCountElement = document.getElementById('tt-thumb-meta__new-count');
             if (newCountElement && parseInt(newCountElement.textContent) > 0) return true;
@@ -297,6 +332,7 @@
 
                 if (urls.length > 0) {
                     try {
+                        if (!isContextValid()) return;
                         const CLIPBOARD_KEY = 'tmk_internal_clipboard';
                         const raw = localStorage.getItem(CLIPBOARD_KEY);
                         const currentItems = raw ? JSON.parse(raw) : [];
@@ -312,7 +348,9 @@
                         }));
                     } catch (e) {}
                 }
-                chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                if (isContextValid()) {
+                    chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                }
             };
 
             document.body.appendChild(btnNew);
@@ -351,11 +389,18 @@
     // STORY CONTROLS
     // -----------------------------
     function injectStoryOptions() {
-        if (document.getElementById('tmk-story-options')) return;
-
+        const existing = document.getElementById('tmk-story-options');
         const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
+
+        if (isVideo) {
+            if (existing) existing.remove();
+            return;
+        }
+
+        if (existing) return;
+
         const exitBtn = document.querySelector('button[aria-label="exit"]');
-        if (!exitBtn && !isVideo) return;
+        if (!exitBtn) return;
 
         const options = document.createElement('div');
         options.id = 'tmk-story-options';
@@ -409,13 +454,109 @@
         document.body.appendChild(options);
     }
 
-    const storyObserver = new MutationObserver(() => {
-        injectStoryOptions();
-    });
-    storyObserver.observe(document.body, { childList: true, subtree: true });
-    injectStoryOptions();
+    // -----------------------------
+    // VIDEO PAGE CLIPBOARD ICON
+    // -----------------------------
+    function createClipboardIcon(id) {
+        const icon = document.createElement('div');
+        icon.id = id;
+        icon.title = 'Add Current URL to List';
+        Object.assign(icon.style, {
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            opacity: '0.7',
+            transition: 'opacity 0.2s'
+        });
 
-    const response = await chrome.runtime.sendMessage({ type: "CHECK_STAGGERED" });
+        icon.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 10C14 8.89543 14.8954 8 16 8H32C33.1046 8 34 8.89543 34 10V12H14V10Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+                <path d="M40 20V41C40 42.1046 39.1046 43 38 43H10C8.89543 43 8 42.1046 8 41V14C8 12.8954 8.89543 12 10 12H14V16H34V12H38C39.1046 12 40 12.8954 40 14V17" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 25H32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 33H32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        `;
+
+        icon.onmouseover = () => icon.style.opacity = '1';
+        icon.onmouseout = () => icon.style.opacity = '0.7';
+
+        icon.onclick = (e) => {
+            e.stopPropagation();
+            const url = location.href.split('?')[0];
+            const CLIPBOARD_KEY = 'tmk_internal_clipboard';
+            const raw = localStorage.getItem(CLIPBOARD_KEY);
+            const currentItems = raw ? JSON.parse(raw) : [];
+            if (!currentItems.includes(url)) {
+                const merged = [...currentItems, url];
+                localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(merged));
+                navigator.clipboard.writeText(merged.join('\n')).catch(() => {});
+                showNotification(`Added current video to list.\nTotal: ${merged.length}`, '#4ecdc4');
+            } else {
+                showNotification("URL already in list.", "#ff6b6b");
+            }
+        };
+        return icon;
+    }
+
+    function injectVideoClipboardIcon() {
+        const avatarTargetSelector = '#one-column-item-0 > div > section[class*="SectionActionBarContainer"] > div[class*="DivAvatarActionItemContainer"]';
+        const avatarTarget = document.querySelector(avatarTargetSelector);
+        const existingAvatarIcon = document.getElementById('tmk-video-clipboard-icon');
+
+        if (!avatarTarget) {
+            if (existingAvatarIcon) existingAvatarIcon.remove();
+        } else if (!existingAvatarIcon) {
+            const icon = createClipboardIcon('tmk-video-clipboard-icon');
+            icon.style.marginBottom = '12px';
+            avatarTarget.parentNode.insertBefore(icon, avatarTarget);
+        }
+
+        const actionTargetSelector = 'div[data-e2e="browse-follow"]';
+        const actionTarget = document.querySelector(actionTargetSelector);
+        const existingActionIcon = document.getElementById('tmk-video-clipboard-icon-actions');
+
+        if (!actionTarget) {
+            if (existingActionIcon) existingActionIcon.remove();
+        } else if (!existingActionIcon) {
+            const icon = createClipboardIcon('tmk-video-clipboard-icon-actions');
+            icon.style.marginTop = '12px';
+            actionTarget.parentNode.insertBefore(icon, actionTarget.nextSibling);
+        }
+    }
+
+    const appObserver = new MutationObserver(() => {
+        if (!isContextValid()) {
+            appObserver.disconnect();
+            return;
+        }
+        injectStoryOptions();
+        injectVideoClipboardIcon();
+    });
+    appObserver.observe(document.body, { childList: true, subtree: true });
+    injectStoryOptions();
+    injectVideoClipboardIcon();
+
+    // Failsafe polling for SPA transitions
+    const videoPoll = setInterval(() => {
+        if (!isContextValid()) {
+            clearInterval(videoPoll);
+            return;
+        }
+        injectVideoClipboardIcon();
+    }, 1000);
+
+    let response;
+    if (isContextValid()) {
+        try {
+            response = await chrome.runtime.sendMessage({ type: "CHECK_STAGGERED" });
+        } catch (e) {
+            console.warn("Stagger Nav: Failed to send initial CHECK_STAGGERED message", e);
+        }
+    }
+
     if (response && response.isStaggered) {
         createForwardBtn();
         if (response.total) {
@@ -439,6 +580,7 @@
 
         async function startPolling() {
             if (pollInterval) clearInterval(pollInterval);
+            if (!isContextValid()) return;
 
             const res = await chrome.storage.local.get(["automatic_load_enabled", "fast_mode_enabled", "staggered_scan_baselines"]);
             if (!res.automatic_load_enabled) return;
@@ -454,6 +596,10 @@
             const maxPolls = 10;
 
             pollInterval = setInterval(() => {
+                if (!isContextValid()) {
+                    clearInterval(pollInterval);
+                    return;
+                }
                 pollCount++;
                 
                 // 1. Check for the userscript element as a primary signal
@@ -484,7 +630,9 @@
                 if (foundNew) {
                     console.log("Staggered Navigation: New videos found via direct scraping! Stopping automation.");
                     clearInterval(pollInterval);
-                    chrome.runtime.sendMessage({ type: "PLAY_SOUND", sound: "new_videos" });
+                    if (isContextValid()) {
+                        chrome.runtime.sendMessage({ type: "PLAY_SOUND", sound: "new_videos" });
+                    }
                     return;
                 }
 
@@ -495,14 +643,18 @@
                     clearInterval(pollInterval);
                     const delay = res.fast_mode_enabled ? 200 : Math.floor(Math.random() * 2000) + 1000;
                     setTimeout(() => {
-                        chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                        if (isContextValid()) {
+                            chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                        }
                     }, delay);
                 } else if (pollCount >= maxPolls) {
                     console.log("Staggered Navigation: No new content found after timeout. Advancing.");
                     clearInterval(pollInterval);
                     const delay = res.fast_mode_enabled ? 200 : Math.floor(Math.random() * 2000) + 1000;
                     setTimeout(() => {
-                        chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                        if (isContextValid()) {
+                            chrome.runtime.sendMessage({ type: "NEXT_STAGGERED" });
+                        }
                     }, delay);
                 }
             }, 1000);
@@ -510,15 +662,17 @@
 
         startPolling();
 
-        chrome.storage.onChanged.addListener((changes) => {
-            if (changes.automatic_load_enabled || changes.fast_mode_enabled) {
-                if ((changes.automatic_load_enabled && changes.automatic_load_enabled.newValue) ||
-                    (changes.fast_mode_enabled)) {
-                    startPolling();
-                } else {
-                    if (pollInterval) clearInterval(pollInterval);
+        if (isContextValid()) {
+            chrome.storage.onChanged.addListener((changes) => {
+                if (changes.automatic_load_enabled || changes.fast_mode_enabled) {
+                    if ((changes.automatic_load_enabled && changes.automatic_load_enabled.newValue) ||
+                        (changes.fast_mode_enabled)) {
+                        startPolling();
+                    } else {
+                        if (pollInterval) clearInterval(pollInterval);
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 })();
