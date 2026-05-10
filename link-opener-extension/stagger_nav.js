@@ -514,7 +514,7 @@
             avatarTarget.parentNode.insertBefore(icon, avatarTarget);
         }
 
-        const actionTargetSelector = 'div[data-e2e="browse-ellipsis"]';
+        const actionTargetSelector = 'div[data-e2e="browse-follow"]';
         const actionTarget = document.querySelector(actionTargetSelector);
         const existingActionIcon = document.getElementById('tmk-video-clipboard-icon-actions');
 
@@ -522,8 +522,8 @@
             if (existingActionIcon) existingActionIcon.remove();
         } else if (!existingActionIcon) {
             const icon = createClipboardIcon('tmk-video-clipboard-icon-actions');
-            icon.style.marginRight = '12px';
-            actionTarget.parentNode.insertBefore(icon, actionTarget);
+            icon.style.marginTop = '12px';
+            actionTarget.parentNode.insertBefore(icon, actionTarget.nextSibling);
         }
     }
 
