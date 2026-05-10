@@ -598,82 +598,6 @@
     }, true);
 
 
-    // ------------------ Video Page Links ------------------
-    function handleVideoPageLinks() {
-        const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        // Robust selector looking for the icon wrapper in the video container
-        const targetSelectors = [
-            '#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div:nth-child(4) > div > div.css-he541t-7937d88b--DivVideoContainer.e1hfi39w12 > div.css-1awl6z0-7937d88b--DivIconWrapper.e1hfi39w7',
-            '[class*="DivVideoContainer"] [class*="DivIconWrapper"]',
-            '[class*="DivVideoContainer"] button[aria-label="Copy link"]',
-            '[class*="DivVideoContainer"] [class*="DivIconWrapper"]'
-        ];
-        let target = null;
-        for (const sel of targetSelectors) {
-            target = document.querySelector(sel);
-            if (target) break;
-        }
-
-        let container = document.getElementById('tmk-video-links-container');
-
-        if (isVideo && target) {
-            // Re-inject if container was detached or is in wrong place
-            if (!container || container.parentNode !== target.parentNode) {
-                if (container) container.remove();
-                container = document.createElement('div');
-                container.id = 'tmk-video-links-container';
-                Object.assign(container.style, {
-                    display: 'flex',
-                    alignItems: 'center',
-                    marginRight: '12px',
-                    gap: '15px',
-                    fontSize: '14px',
-                    zIndex: '1000'
-                });
-
-                const createLink = (text, color, onClick) => {
-                    const a = document.createElement('a');
-                    a.href = '#';
-                    a.textContent = text;
-                    Object.assign(a.style, {
-                        color: color,
-                        textDecoration: 'none',
-                        fontWeight: 'bold',
-                        whiteSpace: 'nowrap'
-                    });
-                    a.onclick = (e) => {
-                        e.preventDefault();
-                        onClick();
-                    };
-                    return a;
-                };
-
-                container.appendChild(createLink('Add Current URL to List', '#4ecdc4', () => {
-                    const currentUrl = window.location.href.split('?')[0];
-                    const updatedClipboard = appendToClipboard([currentUrl]);
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
-                    }
-                    showNotification(`Added to list: ${currentUrl.split('/').pop()}`, '#4ecdc4');
-                }));
-
-                container.appendChild(createLink('Clear List & Copy Current URL', '#ff6b6b', () => {
-                    clearClipboard();
-                    const currentUrl = window.location.href.split('?')[0];
-                    const updatedClipboard = appendToClipboard([currentUrl]);
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(updatedClipboard.join('\n')).catch(() => {});
-                    }
-                    showNotification("Cleared list and copied current URL.", "#ff6b6b");
-                }));
-
-                target.parentNode.insertBefore(container, target);
-            }
-        } else {
-            if (container) container.remove();
-        }
-    }
-
     // ------------------ SPA Detection & Reactive UI ------------------
     let lastUrl = location.href;
     let lastUser = getUsernameFromUrl();
@@ -696,7 +620,6 @@
             document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
             lastUser = null;
         }
-        handleVideoPageLinks();
     }
 
     // Use MutationObserver for immediate response to DOM changes
