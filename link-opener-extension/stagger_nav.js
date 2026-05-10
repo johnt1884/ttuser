@@ -414,27 +414,15 @@
     // -----------------------------
     // VIDEO PAGE CLIPBOARD ICON
     // -----------------------------
-    function injectVideoClipboardIcon() {
-        const targetSelector = '#one-column-item-0 > div > section[class*="SectionActionBarContainer"] > div[class*="DivAvatarActionItemContainer"]';
-        const target = document.querySelector(targetSelector);
-        const existing = document.getElementById('tmk-video-clipboard-icon');
-
-        if (!target) {
-            if (existing) existing.remove();
-            return;
-        }
-
-        if (existing) return;
-
+    function createClipboardIcon(id) {
         const icon = document.createElement('div');
-        icon.id = 'tmk-video-clipboard-icon';
+        icon.id = id;
         icon.title = 'Add Current URL to List';
         Object.assign(icon.style, {
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: '12px',
             color: '#fff',
             opacity: '0.7',
             transition: 'opacity 0.2s'
@@ -452,7 +440,8 @@
         icon.onmouseover = () => icon.style.opacity = '1';
         icon.onmouseout = () => icon.style.opacity = '0.7';
 
-        icon.onclick = () => {
+        icon.onclick = (e) => {
+            e.stopPropagation();
             const url = location.href.split('?')[0];
             const CLIPBOARD_KEY = 'tmk_internal_clipboard';
             const raw = localStorage.getItem(CLIPBOARD_KEY);
@@ -466,8 +455,33 @@
                 showNotification("URL already in list.", "#ff6b6b");
             }
         };
+        return icon;
+    }
 
-        target.parentNode.insertBefore(icon, target);
+    function injectVideoClipboardIcon() {
+        const avatarTargetSelector = '#one-column-item-0 > div > section[class*="SectionActionBarContainer"] > div[class*="DivAvatarActionItemContainer"]';
+        const avatarTarget = document.querySelector(avatarTargetSelector);
+        const existingAvatarIcon = document.getElementById('tmk-video-clipboard-icon');
+
+        if (!avatarTarget) {
+            if (existingAvatarIcon) existingAvatarIcon.remove();
+        } else if (!existingAvatarIcon) {
+            const icon = createClipboardIcon('tmk-video-clipboard-icon');
+            icon.style.marginBottom = '12px';
+            avatarTarget.parentNode.insertBefore(icon, avatarTarget);
+        }
+
+        const actionTargetSelector = 'div[class*="DivVideoContainer"] > div[class*="DivIconWrapper"]';
+        const actionTarget = document.querySelector(actionTargetSelector);
+        const existingActionIcon = document.getElementById('tmk-video-clipboard-icon-actions');
+
+        if (!actionTarget) {
+            if (existingActionIcon) existingActionIcon.remove();
+        } else if (!existingActionIcon) {
+            const icon = createClipboardIcon('tmk-video-clipboard-icon-actions');
+            icon.style.marginRight = '12px';
+            actionTarget.parentNode.insertBefore(icon, actionTarget);
+        }
     }
 
     const appObserver = new MutationObserver(() => {
