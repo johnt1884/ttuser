@@ -411,11 +411,77 @@
         document.body.appendChild(options);
     }
 
-    const storyObserver = new MutationObserver(() => {
+    // -----------------------------
+    // VIDEO PAGE CLIPBOARD ICON
+    // -----------------------------
+    function injectVideoClipboardIcon() {
+        const targetSelector = '#one-column-item-0 > div > section[class*="SectionActionBarContainer"] > div[class*="DivAvatarActionItemContainer"]';
+        const target = document.querySelector(targetSelector);
+        const existing = document.getElementById('tmk-video-clipboard-icon');
+
+        if (!target) {
+            if (existing) existing.remove();
+            return;
+        }
+
+        if (existing) return;
+
+        const icon = document.createElement('div');
+        icon.id = 'tmk-video-clipboard-icon';
+        icon.title = 'Add Current URL to List';
+        Object.assign(icon.style, {
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '12px',
+            color: '#fff',
+            opacity: '0.7',
+            transition: 'opacity 0.2s'
+        });
+
+        icon.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 10C14 8.89543 14.8954 8 16 8H32C33.1046 8 34 8.89543 34 10V12H14V10Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+                <path d="M40 20V41C40 42.1046 39.1046 43 38 43H10C8.89543 43 8 42.1046 8 41V14C8 12.8954 8.89543 12 10 12H14V16H34V12H38C39.1046 12 40 12.8954 40 14V17" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 25H32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 33H32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        `;
+
+        icon.onmouseover = () => icon.style.opacity = '1';
+        icon.onmouseout = () => icon.style.opacity = '0.7';
+
+        icon.onclick = () => {
+            const url = location.href.split('?')[0];
+            const CLIPBOARD_KEY = 'tmk_internal_clipboard';
+            const raw = localStorage.getItem(CLIPBOARD_KEY);
+            const currentItems = raw ? JSON.parse(raw) : [];
+            if (!currentItems.includes(url)) {
+                const merged = [...currentItems, url];
+                localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(merged));
+                navigator.clipboard.writeText(merged.join('\n')).catch(() => {});
+                showNotification(`Added current video to list.\nTotal: ${merged.length}`, '#4ecdc4');
+            } else {
+                showNotification("URL already in list.", "#ff6b6b");
+            }
+        };
+
+        target.parentNode.insertBefore(icon, target);
+    }
+
+    const appObserver = new MutationObserver(() => {
         injectStoryOptions();
+        injectVideoClipboardIcon();
     });
-    storyObserver.observe(document.body, { childList: true, subtree: true });
+    appObserver.observe(document.body, { childList: true, subtree: true });
     injectStoryOptions();
+    injectVideoClipboardIcon();
+
+    // Failsafe polling for SPA transitions
+    setInterval(() => {
+        injectVideoClipboardIcon();
+    }, 1000);
 
     const response = await chrome.runtime.sendMessage({ type: "CHECK_STAGGERED" });
     if (response && response.isStaggered) {
