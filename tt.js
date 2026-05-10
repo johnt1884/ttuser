@@ -205,6 +205,10 @@
             removeDisplay();
             return;
         }
+        const currentUser = getUsernameFromUrl();
+        if (lastExtractionData && lastExtractionData.username !== currentUser) {
+            removeDisplay(); // Clear display of previous user while loading
+        }
         const scriptElement = document.getElementById('SIGI_STATE') ||
             document.querySelector('script[id^="__UNIVERSAL_DATA_FOR_REHYDRATION__"]');
         if (!scriptElement) {
@@ -479,7 +483,7 @@
             return;
         }
         document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]').forEach(a => {
-            if (a.dataset.checkboxesAdded) return;
+            if (a.dataset.checkboxesAdded && a.querySelector('.tmk-custom-checkbox')) return;
             a.dataset.checkboxesAdded = "true";
             const href = a.href.split('?')[0];
             // Individual checkbox (top-left)
@@ -613,7 +617,9 @@
         let container = document.getElementById('tmk-video-links-container');
 
         if (isVideo && target) {
-            if (!container) {
+            // Re-inject if container was detached or is in wrong place
+            if (!container || container.parentNode !== target.parentNode) {
+                if (container) container.remove();
                 container = document.createElement('div');
                 container.id = 'tmk-video-links-container';
                 Object.assign(container.style, {
@@ -668,23 +674,47 @@
         }
     }
 
-    // ------------------ SPA Detection ------------------
+    // ------------------ SPA Detection & Reactive UI ------------------
     let lastUrl = location.href;
+    let lastUser = getUsernameFromUrl();
+
+    function runAllInjections() {
+        if (isProfilePage()) {
+            const currentUser = getUsernameFromUrl();
+            if (currentUser !== lastUser) {
+                lastUser = currentUser;
+                selectedLinks.clear();
+                window._tmk_extractRetry = 0;
+                extractVideoCount();
+            }
+            if (!document.getElementById('exactVideoCountDisplay')) {
+                refreshUI();
+            }
+            injectCheckboxes();
+        } else {
+            removeDisplay();
+            document.querySelectorAll('.tmk-custom-checkbox, .tmk-row-select-checkbox').forEach(el => el.remove());
+            lastUser = null;
+        }
+        handleVideoPageLinks();
+    }
+
+    // Use MutationObserver for immediate response to DOM changes
+    const observer = new MutationObserver(() => {
+        runAllInjections();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Fallback interval
     setInterval(() => {
         if (location.href !== lastUrl) {
             lastUrl = location.href;
-            window._tmk_extractRetry = 0;
-            if (isProfilePage()) {
-                setTimeout(extractVideoCount, 500);
-            } else {
-                removeDisplay();
-            }
+            runAllInjections();
         }
-        if (isProfilePage() && !document.getElementById('exactVideoCountDisplay')) {
-             refreshUI();
-        }
-        injectCheckboxes();
-        handleVideoPageLinks();
-    }, 1000);
-    window.addEventListener('load', () => setTimeout(extractVideoCount, 3000));
+    }, 500);
+
+    window.addEventListener('load', () => {
+        runAllInjections();
+        setTimeout(extractVideoCount, 2000);
+    });
 })();
