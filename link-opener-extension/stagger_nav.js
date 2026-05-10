@@ -351,10 +351,15 @@
     // STORY CONTROLS
     // -----------------------------
     function injectStoryOptions() {
-        if (document.getElementById('tmk-story-options')) return;
-
+        const existing = document.getElementById('tmk-story-options');
         const isVideo = /\/(video|photo)\/\d+/.test(location.pathname);
-        if (isVideo) return;
+
+        if (isVideo) {
+            if (existing) existing.remove();
+            return;
+        }
+
+        if (existing) return;
 
         const exitBtn = document.querySelector('button[aria-label="exit"]');
         if (!exitBtn) return;
@@ -471,7 +476,7 @@
             avatarTarget.parentNode.insertBefore(icon, avatarTarget);
         }
 
-        const actionTargetSelector = 'div[class*="DivVideoContainer"] > div[class*="DivIconWrapper"]';
+        const actionTargetSelector = 'div[data-e2e="browse-ellipsis"]';
         const actionTarget = document.querySelector(actionTargetSelector);
         const existingActionIcon = document.getElementById('tmk-video-clipboard-icon-actions');
 
